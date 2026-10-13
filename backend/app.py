@@ -173,6 +173,6 @@ def servir_imagem(nome):
     return send_from_directory(IMAGENS_DIR, nome)
 
 if __name__ == "__main__":
-    print("DaNikeAI Brain v0.2.0")
-    print("Servidor local: http://127.0.0.1:8768")
-    app.run(host="127.0.0.1", port=8769, debug=False)
+    porta = int(os.environ.get("PORT", "8769"))
+    print(f"DaNikeAI Brain v0.2.0 — porta {porta}")
+    app.run(host="0.0.0.0", port=porta, debug=False)
