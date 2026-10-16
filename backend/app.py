@@ -27,7 +27,7 @@ def status():
             "pesquisa_web": True,
             "noticias": True,
             "geracao_imagens": bool(os.environ.get("POLLINATIONS_API_KEY")),
-            "ia_conectada": False
+            "ia_conectada": bool(os.environ.get("HF_TOKEN", "").strip())
         }
     })
 
@@ -43,15 +43,74 @@ def chat():
     if len(mensagem) > 4000:
         return jsonify({"erro": "Máximo de 4000 caracteres."}), 413
 
-    return jsonify({
-        "nome": "DaNikeAI",
-        "mensagem_recebida": mensagem,
-        "resposta": (
-            "Recebi sua mensagem. A pesquisa já está disponível "
-            "em /pesquisa. O modelo de conversa ainda precisa ser conectado."
-        ),
-        "ia_conectada": False
-    })
+    token = os.environ.get("HF_TOKEN", "").strip()
+    if not token:
+        return jsonify({
+            "erro": "HF_TOKEN não está configurado no servidor.",
+            "ia_conectada": False
+        }), 503
+
+    try:
+        resposta = SESSION.post(
+            "https://router.huggingface.co/v1/chat/completions",
+            headers={
+                "Authorization": "Bearer " + token,
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "Qwen/Qwen2.5-7B-Instruct",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "Você é a DaNikeAI, uma assistente útil. Responda em português do Brasil, com clareza e naturalidade."
+                    },
+                    {"role": "user", "content": mensagem}
+                ],
+                "max_tokens": 500,
+                "temperature": 0.7
+            },
+            timeout=90
+        )
+
+        if not resposta.ok:
+            print("[CHAT HF] HTTP", resposta.status_code)
+            return jsonify({
+                "erro": "O provedor de IA recusou a solicitação.",
+                "status_provedor": resposta.status_code,
+                "ia_conectada": False
+            }), 502
+
+        dados_ia = resposta.json()
+        escolhas = dados_ia.get("choices", [])
+        texto = ""
+        if escolhas:
+            texto = escolhas[0].get("message", {}).get("content", "")
+
+        if not isinstance(texto, str) or not texto.strip():
+            return jsonify({
+                "erro": "O modelo não retornou uma resposta válida.",
+                "ia_conectada": False
+            }), 502
+
+        return jsonify({
+            "nome": "DaNikeAI",
+            "mensagem_recebida": mensagem,
+            "resposta": texto.strip(),
+            "ia_conectada": True,
+            "modelo": dados_ia.get("model", "Qwen/Qwen2.5-7B-Instruct")
+        })
+
+    except requests.RequestException:
+        return jsonify({
+            "erro": "Não foi possível conectar ao provedor de IA.",
+            "ia_conectada": False
+        }), 502
+    except (ValueError, KeyError, TypeError):
+        return jsonify({
+            "erro": "A resposta do provedor veio em formato inesperado.",
+            "ia_conectada": False
+        }), 502
+
 
 @app.get("/pesquisa")
 def pesquisa():
