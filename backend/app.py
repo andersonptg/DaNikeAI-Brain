@@ -73,7 +73,7 @@ def chat():
         )
 
         if not resposta.ok:
-            print("[CHAT HF] HTTP", resposta.status_code)
+            print("[CHAT HF] HTTP", resposta.status_code, resposta.text[:1000])
             return jsonify({
                 "erro": "O provedor de IA recusou a solicitação.",
                 "status_provedor": resposta.status_code,
