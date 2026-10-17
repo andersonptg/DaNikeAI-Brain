@@ -1,0 +1,61 @@
+name: Enviar FCM
+
+on:
+  workflow_dispatch:
+    inputs:
+      uid:
+        description: "UID do usuário destinatário"
+        required: true
+        type: string
+      tipo:
+        description: "Tipo da notificação"
+        required: true
+        type: choice
+        options:
+          - mensagem
+          - aviso
+          - atualizacao
+          - manutencao
+          - geral
+      titulo:
+        description: "Título"
+        required: true
+        type: string
+      texto:
+        description: "Mensagem"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  enviar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Autenticar no Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/724683245123/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: firebase-adminsdk-fbsvc@da-nike-films.iam.gserviceaccount.com
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar Firebase Admin
+        run: pip install firebase-admin
+
+      - name: Enviar notificação
+        env:
+          NOTIFICACAO_UID: ${{ inputs.uid }}
+          NOTIFICACAO_TIPO: ${{ inputs.tipo }}
+          NOTIFICACAO_TITULO: ${{ inputs.titulo }}
+          NOTIFICACAO_TEXTO: ${{ inputs.texto }}
+        run: python scripts/send_fcm.py
