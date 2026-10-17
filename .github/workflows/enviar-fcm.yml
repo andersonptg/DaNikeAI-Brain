@@ -25,6 +25,10 @@ on:
         description: "Mensagem"
         required: true
         type: string
+      remetente_uid:
+        description: "UID do remetente (mensagem)"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -58,4 +62,5 @@ jobs:
           NOTIFICACAO_TIPO: ${{ inputs.tipo }}
           NOTIFICACAO_TITULO: ${{ inputs.titulo }}
           NOTIFICACAO_TEXTO: ${{ inputs.texto }}
+          NOTIFICACAO_REMETENTE_UID: ${{ inputs.remetente_uid }}
         run: python scripts/send_fcm.py

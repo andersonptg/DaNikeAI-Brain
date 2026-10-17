@@ -8,6 +8,7 @@ uid = os.environ["NOTIFICACAO_UID"]
 tipo = os.environ["NOTIFICACAO_TIPO"]
 titulo = os.environ["NOTIFICACAO_TITULO"]
 texto = os.environ["NOTIFICACAO_TEXTO"]
+remetente_uid = os.environ.get("NOTIFICACAO_REMETENTE_UID", "").strip()
 
 if not firebase_admin._apps:
     firebase_admin.initialize_app(options={"projectId": PROJECT_ID})
@@ -38,6 +39,7 @@ for token in tokens:
             "tipo": tipo,
             "titulo": titulo,
             "texto": texto,
+            "remetenteUid": remetente_uid,
         },
         token=token,
         android=messaging.AndroidConfig(
