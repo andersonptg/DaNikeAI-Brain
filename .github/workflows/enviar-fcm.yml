@@ -1,6 +1,10 @@
 name: Enviar FCM
 
 on:
+  schedule:
+    - cron: "*/5 * * * *"
+  repository_dispatch:
+    types: [enviar-fcm]
   workflow_dispatch:
     inputs:
       uid:
@@ -56,11 +60,16 @@ jobs:
       - name: Instalar Firebase Admin
         run: pip install firebase-admin
 
+      - name: Processar fila automática
+        if: github.event_name == 'schedule'
+        run: python scripts/processar_notificacoes.py
+
       - name: Enviar notificação
+        if: github.event_name != 'schedule'
         env:
-          NOTIFICACAO_UID: ${{ inputs.uid }}
-          NOTIFICACAO_TIPO: ${{ inputs.tipo }}
-          NOTIFICACAO_TITULO: ${{ inputs.titulo }}
-          NOTIFICACAO_TEXTO: ${{ inputs.texto }}
-          NOTIFICACAO_REMETENTE_UID: ${{ inputs.remetente_uid }}
+          NOTIFICACAO_UID: ${{ github.event.client_payload.uid || inputs.uid }}
+          NOTIFICACAO_TIPO: ${{ github.event.client_payload.tipo || inputs.tipo }}
+          NOTIFICACAO_TITULO: ${{ github.event.client_payload.titulo || inputs.titulo }}
+          NOTIFICACAO_TEXTO: ${{ github.event.client_payload.texto || inputs.texto }}
+          NOTIFICACAO_REMETENTE_UID: ${{ github.event.client_payload.remetente_uid || inputs.remetente_uid }}
         run: python scripts/send_fcm.py
