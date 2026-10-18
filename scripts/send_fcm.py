@@ -51,3 +51,22 @@ for token in tokens:
     print(f"FCM enviado com sucesso: {resposta}")
 
 print(f"Total de dispositivos: {len(tokens)}")
+
+# Evita que o processamento agendado envie novamente
+fila = db.collection("fila_notificacoes").where("uid", "==", uid).where("enviada", "==", False).stream()
+
+for doc in fila:
+    dados = doc.to_dict() or {}
+    if (
+        str(dados.get("tipo", "")).strip() == tipo
+        and str(dados.get("titulo", "")).strip() == titulo
+        and str(dados.get("texto", "")).strip() == texto
+        and str(dados.get("remetenteUid", dados.get("remetente_uid", ""))).strip() == remetente_uid
+    ):
+        doc.reference.update({
+            "enviada": True,
+            "enviadaEm": firestore.SERVER_TIMESTAMP,
+            "totalDispositivos": len(tokens)
+        })
+        print(f"Fila marcada como enviada: {doc.id}")
+        break
