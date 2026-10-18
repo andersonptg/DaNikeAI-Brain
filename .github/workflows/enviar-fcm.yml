@@ -60,19 +60,21 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Restaurar cache do pip
+      - name: Restaurar ambiente Python
+        id: python-cache
         uses: actions/cache@v4
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements-fcm.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-      - name: Instalar Firebase Admin
-        run: pip install -r requirements-fcm.txt
+          path: .venv
+          key: ${{ runner.os }}-venv-fcm-${{ hashFiles('requirements-fcm.txt') }}
+      - name: Criar ambiente Python
+        if: steps.python-cache.outputs.cache-hit != 'true'
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements-fcm.txt
 
       - name: Processar fila automática
         if: github.event_name == 'schedule'
-        run: python scripts/processar_notificacoes.py
+        run: .venv/bin/python scripts/processar_notificacoes.py
 
       - name: Enviar notificação
         if: github.event_name != 'schedule'
@@ -83,4 +85,4 @@ jobs:
           NOTIFICACAO_TEXTO: ${{ github.event.client_payload.texto || inputs.texto }}
           NOTIFICACAO_REMETENTE_UID: ${{ github.event.client_payload.remetente_uid || inputs.remetente_uid }}
           NOTIFICACAO_FILA_ID: ${{ github.event.client_payload.fila_id || inputs.fila_id }}
-        run: python scripts/send_fcm.py
+        run: .venv/bin/python scripts/send_fcm.py
