@@ -72,11 +72,7 @@ jobs:
           python -m venv .venv
           .venv/bin/python -m pip install -r requirements-fcm.txt
 
-      - name: Diagnosticar UIDs FCM
-      if: github.event_name == 'workflow_dispatch'
-      run: .venv/bin/python scripts/listar_uids_fcm.py
-
-    - name: Processar fila automática
+      - name: Processar fila automática
         if: github.event_name == 'schedule'
         run: .venv/bin/python scripts/processar_notificacoes.py
 
