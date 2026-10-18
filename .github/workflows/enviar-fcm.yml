@@ -64,11 +64,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements-fcm.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
       - name: Instalar Firebase Admin
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-fcm.txt
 
       - name: Processar fila automática
         if: github.event_name == 'schedule'
