@@ -31,6 +31,71 @@ def status():
         }
     })
 
+@app.post("/notificar")
+def notificar():
+    dados = request.get_json(silent=True) or {}
+
+    segredo = request.headers.get("X-DaNikeAI-Secret", "")
+    segredo_correto = os.environ.get("DANIKEAI_NOTIFY_SECRET", "").strip()
+
+    if not segredo_correto or segredo != segredo_correto:
+        return jsonify({"erro": "Não autorizado."}), 401
+
+    uid = str(dados.get("uid", "")).strip()
+    tipo = str(dados.get("tipo", "geral")).strip()
+    titulo = str(dados.get("titulo", "DaNikeAI")).strip()
+    texto = str(dados.get("texto", "")).strip()
+    remetente_uid = str(dados.get("remetente_uid", "")).strip()
+
+    if not uid or not texto:
+        return jsonify({"erro": "uid e texto são obrigatórios."}), 400
+
+    token = os.environ.get("GITHUB_DISPATCH_TOKEN", "").strip()
+
+    if not token:
+        return jsonify({"erro": "GITHUB_DISPATCH_TOKEN não configurado."}), 503
+
+    payload = {
+        "event_type": "enviar-fcm",
+        "client_payload": {
+            "uid": uid,
+            "tipo": tipo,
+            "titulo": titulo,
+            "texto": texto,
+            "remetente_uid": remetente_uid
+        }
+    }
+
+    try:
+        resposta = SESSION.post(
+            "https://api.github.com/repos/andersonptg/DaNikeAI-Brain/dispatches",
+            headers={
+                "Authorization": "Bearer " + token,
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+                "Content-Type": "application/json"
+            },
+            json=payload,
+            timeout=15
+        )
+
+        if resposta.status_code != 204:
+            print("[NOTIFICACAO GITHUB]", resposta.status_code, resposta.text[:500])
+            return jsonify({
+                "erro": "Não foi possível disparar a notificação.",
+                "status_github": resposta.status_code
+            }), 502
+
+        return jsonify({
+            "status": "disparado",
+            "mensagem": "Notificação enviada para processamento."
+        })
+
+    except requests.RequestException as erro:
+        print("[NOTIFICACAO]", str(erro)[:300])
+        return jsonify({
+            "erro": "Falha ao conectar ao GitHub."
+        }), 502
 @app.post("/chat")
 def chat():
     dados = request.get_json(silent=True) or {}
