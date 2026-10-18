@@ -12,3 +12,5 @@ backend/geradas/
 
 backups/
 index.html.backup_*
+
+.env

@@ -46,6 +46,7 @@ def notificar():
     titulo = str(dados.get("titulo", "DaNikeAI")).strip()
     texto = str(dados.get("texto", "")).strip()
     remetente_uid = str(dados.get("remetente_uid", "")).strip()
+    fila_id = str(dados.get("fila_id", "")).strip()
 
     if not uid or not texto:
         return jsonify({"erro": "uid e texto são obrigatórios."}), 400
@@ -62,7 +63,8 @@ def notificar():
             "tipo": tipo,
             "titulo": titulo,
             "texto": texto,
-            "remetente_uid": remetente_uid
+            "remetente_uid": remetente_uid,
+            "fila_id": fila_id
         }
     }
 

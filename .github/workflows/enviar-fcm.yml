@@ -29,11 +29,14 @@ on:
         description: "Mensagem"
         required: true
         type: string
-      remetente_uid:
-        description: "UID do remetente (mensagem)"
-        required: false
-        type: string
-
+        remetente_uid:
+          description: "UID do remetente (mensagem)"
+          required: false
+          type: string
+        fila_id:
+          description: "ID do documento da fila (opcional)"
+          required: false
+          type: string
 permissions:
   contents: read
   id-token: write
@@ -72,4 +75,5 @@ jobs:
           NOTIFICACAO_TITULO: ${{ github.event.client_payload.titulo || inputs.titulo }}
           NOTIFICACAO_TEXTO: ${{ github.event.client_payload.texto || inputs.texto }}
           NOTIFICACAO_REMETENTE_UID: ${{ github.event.client_payload.remetente_uid || inputs.remetente_uid }}
+          NOTIFICACAO_FILA_ID: ${{ github.event.client_payload.fila_id || inputs.fila_id }}
         run: python scripts/send_fcm.py

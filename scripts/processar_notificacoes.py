@@ -15,6 +15,32 @@ total = 0
 for doc in fila:
     dados = doc.to_dict() or {}
 
+    @firestore.transactional
+    def reservar(transaction):
+        snapshot = doc.reference.get(transaction=transaction)
+        atual = snapshot.to_dict() or {}
+
+        if atual.get("enviada", False) or atual.get("emProcessamento", False):
+            return False
+
+        transaction.update(doc.reference, {
+            "emProcessamento": True,
+            "processamentoIniciadoEm": firestore.SERVER_TIMESTAMP
+        })
+        return True
+
+    transaction = db.transaction()
+
+    try:
+        reservado = reservar(transaction)
+    except Exception as erro:
+        print(f"Erro ao reservar {doc.id}: {erro}")
+        continue
+
+    if not reservado:
+        print(f"Ignorando {doc.id}: já enviada ou em processamento.")
+        continue
+
     uid = dados.get("uid")
     tipo = dados.get("tipo", "geral")
     titulo = dados.get("titulo", "DaNikeAI")
@@ -22,6 +48,7 @@ for doc in fila:
     remetente_uid = dados.get("remetenteUid", "")
 
     if not uid:
+        doc.reference.update({"emProcessamento": False})
         print(f"Ignorando {doc.id}: UID ausente.")
         continue
 
@@ -39,6 +66,7 @@ for doc in fila:
             tokens.append(token)
 
     if not tokens:
+        doc.reference.update({"emProcessamento": False})
         print(f"Nenhum dispositivo para {uid}.")
         continue
 
@@ -67,9 +95,14 @@ for doc in fila:
     if enviados > 0:
         doc.reference.update({
             "enviada": True,
+            "emProcessamento": False,
             "enviadaEm": firestore.SERVER_TIMESTAMP,
             "totalDispositivos": enviados,
         })
         total += 1
+    else:
+        doc.reference.update({
+            "emProcessamento": False
+        })
 
 print(f"Notificações processadas: {total}")
