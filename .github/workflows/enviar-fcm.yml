@@ -60,9 +60,10 @@ jobs:
         with:
           python-version: "3.12"
           cache: "pip"
+          cache-dependency-path: requirements.txt
 
       - name: Instalar Firebase Admin
-        run: pip install firebase-admin
+        run: pip install -r requirements.txt
 
       - name: Processar fila automática
         if: github.event_name == 'schedule'
