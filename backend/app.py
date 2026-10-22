@@ -5,6 +5,9 @@ import requests
 import xml.etree.ElementTree as ET
 import os
 import re
+import json
+import firebase_admin
+from firebase_admin import credentials, firestore, messaging
 
 app = Flask(__name__)
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -14,7 +17,21 @@ MEMORIA_DIR.mkdir(exist_ok=True)
 IMAGENS_DIR.mkdir(parents=True, exist_ok=True)
 
 SESSION = requests.Session()
+
 SESSION.headers["User-Agent"] = "DaNikeAI-Brain/0.2"
+
+# Firebase Admin para envio FCM direto pelo Render
+FIREBASE_SERVICE_ACCOUNT_JSON = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
+
+if FIREBASE_SERVICE_ACCOUNT_JSON and not firebase_admin._apps:
+    try:
+        credenciais = credentials.Certificate(json.loads(FIREBASE_SERVICE_ACCOUNT_JSON))
+        firebase_admin.initialize_app(credenciais, {"projectId": "da-nike-films"})
+        print("[FCM DIRETO] Firebase Admin inicializado.")
+    except Exception as erro:
+        print("[FCM DIRETO] Falha ao inicializar Firebase:", str(erro)[:500])
+
+
 
 @app.get("/status")
 def status():
@@ -51,10 +68,90 @@ def notificar():
     if not uid or not texto:
         return jsonify({"erro": "uid e texto são obrigatórios."}), 400
 
+    # ============================================================
+    # ENVIO FCM DIRETO — não passa pelo GitHub Actions
+    # ============================================================
+    if firebase_admin._apps:
+        try:
+            db = firestore.client()
+
+            dispositivos_ref = (
+                db.collection("usuarios")
+                .document(uid)
+                .collection("dispositivos")
+            )
+
+            tokens = []
+            for dispositivo in dispositivos_ref.stream():
+                token = (dispositivo.to_dict() or {}).get("token")
+                if token:
+                    tokens.append(token)
+
+            if not tokens:
+                return jsonify({
+                    "status": "sem_dispositivo",
+                    "mensagem": "Nenhum dispositivo FCM encontrado."
+                }), 200
+
+            enviados = 0
+
+            for token in tokens:
+                try:
+                    mensagem = messaging.Message(
+                        data={
+                            "tipo": tipo,
+                            "titulo": titulo,
+                            "texto": texto,
+                            "remetenteUid": remetente_uid,
+                        },
+                        token=token,
+                        android=messaging.AndroidConfig(priority="high"),
+                    )
+
+                    resposta = messaging.send(mensagem)
+                    enviados += 1
+                    print("[FCM DIRETO] enviado:", resposta)
+
+                except Exception as erro:
+                    print("[FCM DIRETO] erro no token:", str(erro)[:500])
+
+            if enviados > 0:
+                if fila_id:
+                    try:
+                        db.collection("fila_notificacoes").document(fila_id).update({
+                            "enviada": True,
+                            "emProcessamento": False,
+                            "enviadaEm": firestore.SERVER_TIMESTAMP,
+                            "totalDispositivos": enviados,
+                        })
+                    except Exception as erro:
+                        print("[FCM DIRETO] erro ao atualizar fila:", str(erro)[:300])
+
+                return jsonify({
+                    "status": "enviado",
+                    "metodo": "fcm_direto",
+                    "totalDispositivos": enviados
+                }), 200
+
+            return jsonify({
+                "erro": "Nenhum FCM foi enviado."
+            }), 502
+
+        except Exception as erro:
+            print("[FCM DIRETO] erro geral:", str(erro)[:500])
+            return jsonify({
+                "erro": "Falha no envio FCM direto."
+            }), 502
+
+    # ============================================================
+    # FALLBACK — mantém o mecanismo antigo enquanto necessário
+    # ============================================================
     token = os.environ.get("GITHUB_DISPATCH_TOKEN", "").strip()
 
     if not token:
-        return jsonify({"erro": "GITHUB_DISPATCH_TOKEN não configurado."}), 503
+        return jsonify({
+            "erro": "Firebase direto não configurado e GITHUB_DISPATCH_TOKEN ausente."
+        }), 503
 
     payload = {
         "event_type": "enviar-fcm",
@@ -90,14 +187,16 @@ def notificar():
 
         return jsonify({
             "status": "disparado",
-            "mensagem": "Notificação enviada para processamento."
-        })
+            "metodo": "github_fallback"
+        }), 200
 
     except requests.RequestException as erro:
         print("[NOTIFICACAO]", str(erro)[:300])
         return jsonify({
             "erro": "Falha ao conectar ao GitHub."
         }), 502
+
+
 @app.post("/chat")
 def chat():
     dados = request.get_json(silent=True) or {}
