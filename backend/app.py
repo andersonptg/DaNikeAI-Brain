@@ -238,7 +238,7 @@ def nexo_publicar_filme():
             }), 403
 
     except Exception as erro:
-        print("[NEXO] Falha na autenticacao Firebase:", str(erro)[:500])
+        print("[NEXO] FALHA AUTH REAL:", type(erro).__name__, repr(erro)[:1500])
         return jsonify({
             "sucesso": False,
             "erro": "Token Firebase invalido."
