@@ -225,16 +225,9 @@ def nexo_publicar_filme():
             "erro": "Token Firebase vazio."
         }), 401
 
-    # Importacao local para nao alterar o restante do servidor.
+    # Validacao oficial pelo Firebase Admin SDK.
     try:
-        from google.oauth2 import id_token as google_id_token
-        from google.auth.transport import requests as google_requests
-
-        usuario = google_id_token.verify_firebase_token(
-            firebase_token,
-            google_requests.Request(),
-            audience="da-nike-films"
-        )
+        usuario = firebase_admin.auth.verify_id_token(firebase_token)
 
         email = str(usuario.get("email", "")).strip().lower()
 
