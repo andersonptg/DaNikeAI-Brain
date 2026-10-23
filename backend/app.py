@@ -227,9 +227,14 @@ def nexo_publicar_filme():
 
     # Importacao local para nao alterar o restante do servidor.
     try:
-        from firebase_admin import auth as firebase_auth
+        from google.oauth2 import id_token as google_id_token
+        from google.auth.transport import requests as google_requests
 
-        usuario = firebase_auth.verify_id_token(firebase_token)
+        usuario = google_id_token.verify_firebase_token(
+            firebase_token,
+            google_requests.Request(),
+            audience="da-nike-films"
+        )
 
         email = str(usuario.get("email", "")).strip().lower()
 
