@@ -197,6 +197,141 @@ def notificar():
         }), 502
 
 
+
+@app.post("/nexo/publicar-filme")
+def nexo_publicar_filme():
+    """
+    Ponte segura:
+    Android -> Render -> Base44.
+    O segredo NEXO_ADM_KEY fica somente no Render.
+    """
+
+    # ------------------------------------------------------------
+    # 1. Autenticacao Firebase
+    # ------------------------------------------------------------
+    auth = request.headers.get("Authorization", "").strip()
+
+    if not auth.startswith("Bearer "):
+        return jsonify({
+            "sucesso": False,
+            "erro": "Token Firebase ausente."
+        }), 401
+
+    firebase_token = auth[7:].strip()
+
+    if not firebase_token:
+        return jsonify({
+            "sucesso": False,
+            "erro": "Token Firebase vazio."
+        }), 401
+
+    # Importacao local para nao alterar o restante do servidor.
+    try:
+        from firebase_admin import auth as firebase_auth
+
+        usuario = firebase_auth.verify_id_token(firebase_token)
+
+        email = str(usuario.get("email", "")).strip().lower()
+
+        if email != "lipesanderson@gmail.com":
+            return jsonify({
+                "sucesso": False,
+                "erro": "Apenas o administrador pode publicar filmes."
+            }), 403
+
+    except Exception as erro:
+        print("[NEXO] Falha na autenticacao Firebase:", str(erro)[:500])
+        return jsonify({
+            "sucesso": False,
+            "erro": "Token Firebase invalido."
+        }), 401
+
+    # ------------------------------------------------------------
+    # 2. Dados enviados pelo Android
+    # ------------------------------------------------------------
+    dados = request.get_json(silent=True) or {}
+
+    titulo = str(dados.get("titulo", "")).strip()
+
+    if not titulo:
+        return jsonify({
+            "sucesso": False,
+            "erro": "titulo e obrigatorio."
+        }), 400
+
+    # ------------------------------------------------------------
+    # 3. Chave secreta do Base44
+    # ------------------------------------------------------------
+    chave_base44 = os.environ.get("NEXO_ADM_KEY", "").strip()
+
+    if not chave_base44:
+        print("[NEXO] NEXO_ADM_KEY nao configurada no Render.")
+        return jsonify({
+            "sucesso": False,
+            "erro": "NEXO_ADM_KEY nao configurada no servidor."
+        }), 503
+
+    # ------------------------------------------------------------
+    # 4. Monta payload para a Function do Base44
+    # ------------------------------------------------------------
+    payload = {
+        "titulo": titulo,
+        "descricao": str(dados.get("descricao", "")).strip(),
+        "ano": dados.get("ano"),
+        "categoria": str(dados.get("categoria", "")).strip(),
+        "tipo": str(dados.get("tipo", "Filme")).strip() or "Filme",
+        "poster_url": str(dados.get("poster_url", "")).strip(),
+        "banner_url": str(dados.get("banner_url", "")).strip(),
+        "video_url": str(dados.get("video_url", "")).strip(),
+        "ativo": bool(dados.get("ativo", True)),
+        "destaque": bool(dados.get("destaque", False)),
+    }
+
+    url_base44 = (
+        "https://nippy-nexo-stream-hub.base44.app"
+        "/functions/publicar-filme"
+    )
+
+    try:
+        resposta = SESSION.post(
+            url_base44,
+            headers={
+                "Authorization": "Bearer " + chave_base44,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            json=payload,
+            timeout=30,
+        )
+
+        print(
+            "[NEXO] Base44 respondeu:",
+            resposta.status_code,
+            resposta.text[:1000]
+        )
+
+        try:
+            retorno = resposta.json()
+        except Exception:
+            retorno = {
+                "resposta": resposta.text[:2000]
+            }
+
+        return jsonify({
+            "sucesso": resposta.ok,
+            "status_base44": resposta.status_code,
+            "base44": retorno,
+        }), resposta.status_code
+
+    except requests.RequestException as erro:
+        print("[NEXO] Erro ao conectar ao Base44:", str(erro)[:1000])
+
+        return jsonify({
+            "sucesso": False,
+            "erro": "Falha ao conectar ao Base44."
+        }), 502
+
+
 @app.post("/chat")
 def chat():
     dados = request.get_json(silent=True) or {}
