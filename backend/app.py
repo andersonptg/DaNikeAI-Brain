@@ -323,11 +323,22 @@ def nexo_r2_upload_url():
             ExpiresIn=900,
         )
 
+        url_playback = R2_CLIENT.generate_presigned_url(
+            ClientMethod="get_object",
+            Params={
+                "Bucket": R2_BUCKET,
+                "Key": chave,
+            },
+            ExpiresIn=604800,
+        )
+
         return jsonify({
             "sucesso": True,
             "upload_url": url_upload,
+            "playback_url": url_playback,
             "object_key": chave,
             "expires_in": 900,
+            "playback_expires_in": 604800,
             "content_type": mime,
         }), 200
 
