@@ -3,3 +3,5 @@ requests
 gunicorn
 firebase-admin
 google-auth
+
+boto3

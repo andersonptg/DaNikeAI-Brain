@@ -7,6 +7,7 @@ import os
 import re
 import json
 import firebase_admin
+import boto3
 from firebase_admin import credentials, firestore, messaging
 
 app = Flask(__name__)
@@ -19,6 +20,29 @@ IMAGENS_DIR.mkdir(parents=True, exist_ok=True)
 SESSION = requests.Session()
 
 SESSION.headers["User-Agent"] = "DaNikeAI-Brain/0.2"
+
+
+# Cloudflare R2 / API S3
+R2_ENDPOINT = os.environ.get("R2_ENDPOINT", "").strip()
+R2_BUCKET = os.environ.get("R2_BUCKET", "").strip()
+R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID", "").strip()
+R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "").strip()
+
+R2_CLIENT = None
+
+if all([R2_ENDPOINT, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY]):
+    try:
+        R2_CLIENT = boto3.client(
+            "s3",
+            endpoint_url=R2_ENDPOINT,
+            aws_access_key_id=R2_ACCESS_KEY_ID,
+            aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+            region_name="auto",
+        )
+        print("[R2] Cliente Cloudflare R2 inicializado.")
+    except Exception as erro:
+        print("[R2] Falha ao inicializar cliente:", str(erro)[:500])
+
 
 # Firebase Admin para envio FCM direto pelo Render
 FIREBASE_SERVICE_ACCOUNT_JSON = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
@@ -196,6 +220,127 @@ def notificar():
             "erro": "Falha ao conectar ao GitHub."
         }), 502
 
+
+
+
+@app.post("/nexo/r2/upload-url")
+def nexo_r2_upload_url():
+    """
+    Gera uma URL temporaria para o Android enviar um arquivo
+    diretamente ao Cloudflare R2.
+    """
+
+    # 1) Firebase Auth
+    auth = request.headers.get("Authorization", "").strip()
+    if not auth.startswith("Bearer "):
+        return jsonify({
+            "sucesso": False,
+            "erro": "Token Firebase ausente."
+        }), 401
+
+    firebase_token = auth[7:].strip()
+    if not firebase_token:
+        return jsonify({
+            "sucesso": False,
+            "erro": "Token Firebase vazio."
+        }), 401
+
+    try:
+        usuario = firebase_admin.auth.verify_id_token(firebase_token)
+        email = str(usuario.get("email", "")).strip().lower()
+
+        if email != "lipesanderson@gmail.com":
+            return jsonify({
+                "sucesso": False,
+                "erro": "Apenas o administrador pode enviar arquivos."
+            }), 403
+
+        uid = str(usuario.get("uid", "")).strip()
+
+    except Exception as erro:
+        print(
+            "[NEXO R2] FALHA AUTH:",
+            type(erro).__name__,
+            repr(erro)[:1000]
+        )
+        return jsonify({
+            "sucesso": False,
+            "erro": "Token Firebase invalido."
+        }), 401
+
+    # 2) R2 configurado
+    if R2_CLIENT is None or not R2_BUCKET:
+        print("[NEXO R2] R2 nao configurado no servidor.")
+        return jsonify({
+            "sucesso": False,
+            "erro": "Cloudflare R2 nao configurado no servidor."
+        }), 503
+
+    # 3) Dados do arquivo
+    dados = request.get_json(silent=True) or {}
+
+    nome = str(dados.get("nome", "")).strip()
+    mime = str(dados.get("mime", "")).strip()
+    tipo = str(dados.get("tipo", "arquivo")).strip().lower()
+
+    if not nome:
+        return jsonify({
+            "sucesso": False,
+            "erro": "Nome do arquivo obrigatorio."
+        }), 400
+
+    if not mime:
+        mime = "application/octet-stream"
+
+    # Extensao somente para manter o objeto reconhecivel.
+    nome_limpo = os.path.basename(nome)
+    extensao = ""
+
+    if "." in nome_limpo:
+        extensao = "." + nome_limpo.rsplit(".", 1)[1].lower()
+
+    # Nunca usamos o nome original como chave do objeto.
+    import uuid
+
+    chave = (
+        "nexo/filmes/"
+        + uid
+        + "/"
+        + tipo
+        + "/"
+        + uuid.uuid4().hex
+        + extensao
+    )
+
+    try:
+        url_upload = R2_CLIENT.generate_presigned_url(
+            ClientMethod="put_object",
+            Params={
+                "Bucket": R2_BUCKET,
+                "Key": chave,
+                "ContentType": mime,
+            },
+            ExpiresIn=900,
+        )
+
+        return jsonify({
+            "sucesso": True,
+            "upload_url": url_upload,
+            "object_key": chave,
+            "expires_in": 900,
+            "content_type": mime,
+        }), 200
+
+    except Exception as erro:
+        print(
+            "[NEXO R2] FALHA AO GERAR URL:",
+            type(erro).__name__,
+            repr(erro)[:1500]
+        )
+        return jsonify({
+            "sucesso": False,
+            "erro": "Nao foi possivel gerar a URL temporaria do R2."
+        }), 500
 
 
 @app.post("/nexo/publicar-filme")
